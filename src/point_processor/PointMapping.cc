@@ -183,17 +183,17 @@ void PointMapping::CompactDataHandler(const sensor_msgs::PointCloud2ConstPtr &co
   }
 
   PointT compact_point;
-  compact_point = compact_points[2];
-  int corner_size = int(compact_point.x);
+  compact_point = compact_points[2]; // 为什么取出第三个点
+  int corner_size = int(compact_point.x); 
   int surf_size = int(compact_point.y);
   int full_size = int(compact_point.z);
-
+  // 这个存点云数据的trick 属实没想到
   if ((3 + corner_size + surf_size + full_size) != compact_point_size) {
     LOG(ERROR) << "compact data error: 3+" << corner_size << "+" << surf_size << "+" << full_size << " != "
                << compact_point_size;
     return;
   }
-
+  // 看的出来这个ros消息不是普通的点云数据，前面的3个点存放了特别的数据
   {
     compact_point = compact_points[0];
     transform_sum_.pos.x() = compact_point.x;
@@ -207,11 +207,12 @@ void PointMapping::CompactDataHandler(const sensor_msgs::PointCloud2ConstPtr &co
   }
 
   {
-    laser_cloud_corner_last_->clear();
-    laser_cloud_surf_last_->clear();
-    full_cloud_->clear();
+    laser_cloud_corner_last_->clear();  // 上一个corner 点云
+    laser_cloud_surf_last_->clear();   // 上一个surf 点云
+    full_cloud_->clear();  // 全部的点云
 
     // TODO: use vector map instead?
+    // 一下子可以看到这个ros消息里怎么存放的点云，分成了三个部分
     for (size_t i = 3; i < compact_point_size; ++i) {
       const PointT &p = compact_points[i];
       if (i < 3 + corner_size) {
@@ -224,7 +225,7 @@ void PointMapping::CompactDataHandler(const sensor_msgs::PointCloud2ConstPtr &co
     }
   }
 
-  time_laser_cloud_corner_last_ = compact_data_msg->header.stamp;
+  time_laser_cloud_corner_last_ = compact_data_msg->header.stamp; // 更新时间戳
   time_laser_cloud_surf_last_ = compact_data_msg->header.stamp;
   time_laser_full_cloud_ = compact_data_msg->header.stamp;
   time_laser_odometry_ = compact_data_msg->header.stamp;
@@ -753,8 +754,8 @@ void PointMapping::OptimizeTransformTobeMapped() {
 }
 
 void PointMapping::TransformAssociateToMap() {
-  Transform transform_incre(transform_bef_mapped_.inverse() * transform_sum_.transform());
-  transform_tobe_mapped_ = transform_tobe_mapped_ * transform_incre;
+  Transform transform_incre(transform_bef_mapped_.inverse() * transform_sum_.transform());  // transform_sum_ 是个什么玩意变量？ 2024-3-13
+  transform_tobe_mapped_ = transform_tobe_mapped_ * transform_incre; // 总结就是更新这个transform_tobe_mapped_ 变量
 }
 
 void PointMapping::TransformUpdate() {
@@ -763,7 +764,7 @@ void PointMapping::TransformUpdate() {
 }
 
 void PointMapping::Process() {
-  if (!HasNewData()) {
+  if (!HasNewData()) { // 等待合法新数据
     // waiting for new data to arrive...
     // DLOG(INFO) << "no data received or dropped";
     return;
@@ -772,7 +773,7 @@ void PointMapping::Process() {
   Reset();
 
   ++frame_count_;
-  if (frame_count_ < num_stack_frames_) {
+  if (frame_count_ < num_stack_frames_) {  // 时间降采样？
     return;
   }
   frame_count_ = 0;
@@ -781,7 +782,7 @@ void PointMapping::Process() {
 
   // relate incoming data to map
   // WARNING
-  if (!imu_inited_) {
+  if (!imu_inited_) {  // imu 初始化
     TransformAssociateToMap();
   }
 

@@ -777,18 +777,18 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
 
 void Estimator::ProcessCompactData(const sensor_msgs::PointCloud2ConstPtr &compact_data,
                                    const std_msgs::Header &header) {
-  /// 1. process compact data
+  /// 1. process compact data // 调用pointmapping 类里面的方法， 看完只是存取点云数据（提取过feature 的点云）
   PointMapping::CompactDataHandler(compact_data);
 
-  if (stage_flag_ == INITED) {
+  if (stage_flag_ == INITED) { // 初始化完成之后
     Transform trans_prev(Eigen::Quaterniond(Rs_[estimator_config_.window_size - 1]).cast<float>(),
                          Ps_[estimator_config_.window_size - 1].cast<float>());
     Transform trans_curr(Eigen::Quaterniond(Rs_.last()).cast<float>(),
                          Ps_.last().cast<float>());
 
-    Transform d_trans = trans_prev.inverse() * trans_curr;
+    Transform d_trans = trans_prev.inverse() * trans_curr;  // 最后两帧之间的translation
 
-    Transform transform_incre(transform_bef_mapped_.inverse() * transform_sum_.transform());
+    Transform transform_incre(transform_bef_mapped_.inverse() * transform_sum_.transform());  // ???
 
 //    DLOG(INFO) << "base incre in laser world: " << d_trans;
 //    DLOG(INFO) << "incre in laser world: " << transform_incre;
@@ -798,20 +798,20 @@ void Estimator::ProcessCompactData(const sensor_msgs::PointCloud2ConstPtr &compa
 //
 //    DLOG(INFO) << "tobe: " << transform_tobe_mapped_ * transform_incre;
 
-    if (estimator_config_.imu_factor) {
+    if (estimator_config_.imu_factor) {   // 如果用imu 数据
       //    // WARNING: or using direct date?
-      transform_tobe_mapped_bef_ = transform_tobe_mapped_ * transform_lb_ * d_trans * transform_lb_.inverse();
+      transform_tobe_mapped_bef_ = transform_tobe_mapped_ * transform_lb_ * d_trans * transform_lb_.inverse();        // 这些变量不看论文，不看上下文 压根不知道什么意思
       transform_tobe_mapped_ = transform_tobe_mapped_bef_;
-    } else {
+    } else {  // 如果不用imu数据
       TransformAssociateToMap();
       DLOG(INFO) << ">>>>> transform original tobe <<<<<: " << transform_tobe_mapped_;
     }
 
   }
 
-  if (stage_flag_ != INITED || !estimator_config_.imu_factor) {
+  if (stage_flag_ != INITED || !estimator_config_.imu_factor) {  // 未初始化 | 不用imu数据
     /// 2. process decoded data
-    PointMapping::Process();
+    PointMapping::Process();   // 开始处理点云数据
   } else {
 //    for (int i = 0; i < laser_cloud_surf_last_->size(); ++i) {
 //      PointT &p = laser_cloud_surf_last_->at(i);
@@ -2735,6 +2735,8 @@ void Estimator::ProcessEstimation() {
 
       TicToc t_s;
 
+
+      // 开始处理点云数据
       this->ProcessCompactData(compact_data_msg, compact_data_msg->header);
 
 //      const auto &pos_from_msg = compact_data_msg->pose.pose.position;
