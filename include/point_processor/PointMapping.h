@@ -146,11 +146,11 @@ class PointMapping {
   void Process();
 
  protected:
-
+  // 转换i， j， k 成一个索引，这样不同的坐标都会对应一个独特的索引
   size_t ToIndex(int i, int j, int k) const {
     return i + laser_cloud_length_ * j + laser_cloud_length_ * laser_cloud_width_ * k;
   }
-
+  // 索引反解成i， j， k
   void FromIndex(const size_t &index, int &i, int &j, int &k) {
     int residual = index % (laser_cloud_length_ * laser_cloud_width_);
     k = index / (laser_cloud_length_ * laser_cloud_width_);

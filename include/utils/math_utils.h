@@ -80,7 +80,7 @@ inline PointT ScalePoint(const PointT &p, float scale) {
   p_o.z *= scale;
   return p_o;
 }
-
+// 计算两点之间的距离平方和
 template<typename PointT>
 inline float CalcSquaredDiff(const PointT &a, const PointT &b) {
   float diff_x = a.x - b.x;

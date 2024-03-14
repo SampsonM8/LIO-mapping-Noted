@@ -300,7 +300,7 @@ bool PointMapping::HasNewData() {
 void PointMapping::SetInitFlag(bool set_init) {
   imu_inited_ = set_init;
 }
-
+// 作者自己手写的旋转点的方法
 void PointMapping::PointAssociateToMap(const PointT &pi, PointT &po, const Transform &transform_tobe_mapped) {
   po.x = pi.x;
   po.y = pi.y;
@@ -322,21 +322,21 @@ void PointMapping::PointAssociateTobeMapped(const PointT &pi, PointT &po, const 
 
   RotatePoint(transform_tobe_mapped.rot.conjugate(), po);
 }
-
+// 优化姿态
 void PointMapping::OptimizeTransformTobeMapped() {
-
+  // corner 和 surf 点数判断
   if (laser_cloud_corner_from_map_->points.size() <= 10 || laser_cloud_surf_from_map_->points.size() <= 100) {
     return;
   }
 
   PointT point_sel, point_ori, coeff, abs_coeff;
 
-  std::vector<int> point_search_idx(5, 0);
-  std::vector<float> point_search_sq_dis(5, 0);
+  std::vector<int> point_search_idx(5, 0);  // 最近点搜索对应索引
+  std::vector<float> point_search_sq_dis(5, 0); // 最近点距离存放
 
   pcl::KdTreeFLANN<PointT>::Ptr kdtree_corner_from_map(new pcl::KdTreeFLANN<PointT>());
   pcl::KdTreeFLANN<PointT>::Ptr kdtree_surf_from_map(new pcl::KdTreeFLANN<PointT>());
-
+  // 地图坐标系里面去找最近点 corner surf
   kdtree_corner_from_map->setInputCloud(laser_cloud_corner_from_map_);
   kdtree_surf_from_map->setInputCloud(laser_cloud_surf_from_map_);
 
@@ -370,7 +370,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
   score_point_coeff_.clear();
 
   tic_toc_.Tic();
-
+  // 迭代计算
   for (size_t iter_count = 0; iter_count < num_max_iterations_; ++iter_count) {
     laser_cloud_ori.clear();
     coeff_sel.clear();
@@ -378,13 +378,13 @@ void PointMapping::OptimizeTransformTobeMapped() {
     laser_cloud_ori_spc.clear();
     coeff_sel_spc.clear();
     abs_coeff_sel_spc.clear();
-
+    // corner 点云数据遍历
     for (int i = 0; i < laser_cloud_corner_stack_size; ++i) {
       point_ori = laser_cloud_corner_stack_downsampled_->points[i];
-      PointAssociateToMap(point_ori, point_sel, transform_tobe_mapped_);
-      kdtree_corner_from_map->nearestKSearch(point_sel, 5, point_search_idx, point_search_sq_dis);
+      PointAssociateToMap(point_ori, point_sel, transform_tobe_mapped_);  // 传感器坐标系的点云根据 transform_tobe_mapped_ 转换到地图坐标系
+      kdtree_corner_from_map->nearestKSearch(point_sel, 5, point_search_idx, point_search_sq_dis); // 在地图里找转换过的点云最近的点
 
-      if (point_search_sq_dis[4] < min_match_sq_dis_) {
+      if (point_search_sq_dis[4] < min_match_sq_dis_) {  // 最远的那个也小于 匹配阈值
 //        Vector3Intl vc(0, 0, 0);
         Eigen::Vector3f vc(0, 0, 0);
 
@@ -395,7 +395,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
           vc.y() += point_sel_tmp.y;
           vc.z() += point_sel_tmp.z;
         }
-        vc /= 5.0;
+        vc /= 5.0; // 5个点最近点的 几何中心
 
         Eigen::Matrix3f mat_a;
         mat_a.setZero();
@@ -416,7 +416,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
           mat_a(2, 2) += a.z() * a.z();
         }
         mat_A1 = mat_a / 5.0;
-
+        // 对找到的5个点的协方差矩阵求解特征向量，特征值
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> esolver(mat_A1);
         mat_D1 = esolver.eigenvalues().real();
         mat_V1 = esolver.eigenvectors().real();
@@ -715,7 +715,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
     }
   }
 
-  TransformUpdate();
+  TransformUpdate();  // 更新变换
 
   size_t laser_cloud_sel_spc_size = laser_cloud_ori_spc.points.size();
   if (laser_cloud_sel_spc_size >= 50) {
@@ -782,18 +782,18 @@ void PointMapping::Process() {
 
   // relate incoming data to map
   // WARNING
-  if (!imu_inited_) {  // imu 初始化
-    TransformAssociateToMap();
+  if (!imu_inited_) {  // imu 初始化之后
+    TransformAssociateToMap(); // 更新 transform_tobe_mapped_ 变量
   }
 
   // NOTE: the stack points are the last corner or surf poitns
-  size_t laser_cloud_corner_last_size = laser_cloud_corner_last_->points.size();
+  size_t laser_cloud_corner_last_size = laser_cloud_corner_last_->points.size();  // 上一帧 corner 点云
   for (int i = 0; i < laser_cloud_corner_last_size; i++) {
-    PointAssociateToMap(laser_cloud_corner_last_->points[i], point_sel, transform_tobe_mapped_);
-    laser_cloud_corner_stack_->push_back(point_sel);
+    PointAssociateToMap(laser_cloud_corner_last_->points[i], point_sel, transform_tobe_mapped_);  // 旋转点云
+    laser_cloud_corner_stack_->push_back(point_sel);    // 更新到 laser_cloud_corner_stack_
   }
 
-  size_t laser_cloud_surf_last_size = laser_cloud_surf_last_->points.size();
+  size_t laser_cloud_surf_last_size = laser_cloud_surf_last_->points.size();  // 同样更新 surf 点云
   for (int i = 0; i < laser_cloud_surf_last_size; i++) {
     PointAssociateToMap(laser_cloud_surf_last_->points[i], point_sel, transform_tobe_mapped_);
     laser_cloud_surf_stack_->push_back(point_sel);
@@ -804,19 +804,20 @@ void PointMapping::Process() {
   point_on_z_axis_.x = 0.0;
   point_on_z_axis_.y = 0.0;
   point_on_z_axis_.z = 10.0;
-  PointAssociateToMap(point_on_z_axis_, point_on_z_axis_, transform_tobe_mapped_);
+  PointAssociateToMap(point_on_z_axis_, point_on_z_axis_, transform_tobe_mapped_);    // 原点转换到 local map 坐标系下？
 
   // NOTE: in which cube
   int center_cube_i = int((transform_tobe_mapped_.pos.x() + 25.0) / 50.0) + laser_cloud_cen_length_;
   int center_cube_j = int((transform_tobe_mapped_.pos.y() + 25.0) / 50.0) + laser_cloud_cen_width_;
   int center_cube_k = int((transform_tobe_mapped_.pos.z() + 25.0) / 50.0) + laser_cloud_cen_height_;
 
-  // NOTE: negative index
+  // NOTE: negative index  // 在局部地图将3D空间划分成网格
   if (transform_tobe_mapped_.pos.x() + 25.0 < 0) --center_cube_i;
   if (transform_tobe_mapped_.pos.y() + 25.0 < 0) --center_cube_j;
   if (transform_tobe_mapped_.pos.z() + 25.0 < 0) --center_cube_k;
 
 //  DLOG(INFO) << "center_before: " << center_cube_i << " " << center_cube_j << " " << center_cube_k;
+  // 2024-3-14 不明白下面这些点操作的含义
   {
     while (center_cube_i < 3) {
       for (int j = 0; j < laser_cloud_width_; ++j) {
@@ -923,26 +924,26 @@ void PointMapping::Process() {
 
   // NOTE: above slide cubes
 
-
+  // 清除这些容器
   laser_cloud_valid_idx_.clear();
   laser_cloud_surround_idx_.clear();
 
 //  DLOG(INFO) << "center_after: " << center_cube_i << " " << center_cube_j << " " << center_cube_k;
 //  DLOG(INFO) << "laser_cloud_cen: " << laser_cloud_cen_length_ << " " << laser_cloud_cen_width_ << " "
 //            << laser_cloud_cen_height_;
-
+  // 3层循环遍历 网格内的点
   for (int i = center_cube_i - 2; i <= center_cube_i + 2; ++i) {
     for (int j = center_cube_j - 2; j <= center_cube_j + 2; ++j) {
       for (int k = center_cube_k - 2; k <= center_cube_k + 2; ++k) {
         if (i >= 0 && i < laser_cloud_length_ &&
             j >= 0 && j < laser_cloud_width_ &&
             k >= 0 && k < laser_cloud_height_) { /// Should always in this condition
-
+          // 相对于网格中心的偏移 offset
           float center_x = 50.0f * (i - laser_cloud_cen_length_);
           float center_y = 50.0f * (j - laser_cloud_cen_width_);
           float center_z = 50.0f * (k - laser_cloud_cen_height_); // NOTE: center of the cube
 
-          PointT transform_pos;
+          PointT transform_pos; // 中心点坐标
           transform_pos.x = transform_tobe_mapped_.pos.x();
           transform_pos.y = transform_tobe_mapped_.pos.y();
           transform_pos.z = transform_tobe_mapped_.pos.z();
@@ -971,7 +972,7 @@ void PointMapping::Process() {
               }
             }
           }
-
+          // 转换每个点 成 indx
           size_t cube_idx = ToIndex(i, j, k);
 
 //          DLOG(INFO) << "ToIndex, i, j, k " << cube_idx << " " << i << " " << j << " " << k;
@@ -979,15 +980,15 @@ void PointMapping::Process() {
 //          FromIndex(cube_idx, tmpi, tmpj, tmpk);
 //          DLOG(INFO) << "FromIndex, i, j, k " << cube_idx << " " << tmpi << " " << tmpj << " " << tmpk;
 
-          if (is_in_laser_fov) {
+          if (is_in_laser_fov) { // 判断在lidar fov 内
             laser_cloud_valid_idx_.push_back(cube_idx);
           }
-          laser_cloud_surround_idx_.push_back(cube_idx);
+          laser_cloud_surround_idx_.push_back(cube_idx); // 在3D网格内的点
         }
       }
     }
   }
-
+  // 存储合法点
   // prepare valid map corner and surface cloud for pose optimization
   laser_cloud_corner_from_map_->clear();
   laser_cloud_surf_from_map_->clear();
@@ -996,7 +997,7 @@ void PointMapping::Process() {
     *laser_cloud_corner_from_map_ += *laser_cloud_corner_array_[laser_cloud_valid_idx_[i]];
     *laser_cloud_surf_from_map_ += *laser_cloud_surf_array_[laser_cloud_valid_idx_[i]];
   }
-
+  // 继续转换点到世界坐标系
   // prepare feature stack clouds for pose optimization
   size_t laser_cloud_corner_stack_size2 = laser_cloud_corner_stack_->points.size();
   for (int i = 0; i < laser_cloud_corner_stack_size2; ++i) {
@@ -1012,7 +1013,7 @@ void PointMapping::Process() {
                              transform_tobe_mapped_);
   }
 
-  // down sample feature stack clouds
+  // down sample feature stack clouds // 将采样
   laser_cloud_corner_stack_downsampled_->clear();
   down_size_filter_corner_.setInputCloud(laser_cloud_corner_stack_);
   down_size_filter_corner_.filter(*laser_cloud_corner_stack_downsampled_);
