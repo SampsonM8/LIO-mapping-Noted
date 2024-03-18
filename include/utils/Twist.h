@@ -36,6 +36,7 @@
 
 namespace lio {
 
+// 描述位姿的结构体
 template<typename T>
 struct Twist {
   Eigen::Quaternion<T> rot;

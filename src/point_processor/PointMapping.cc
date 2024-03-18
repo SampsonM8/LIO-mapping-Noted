@@ -300,7 +300,7 @@ bool PointMapping::HasNewData() {
 void PointMapping::SetInitFlag(bool set_init) {
   imu_inited_ = set_init;
 }
-// 作者自己手写的旋转点的方法
+// 作者自己手写的旋转点的方法，旋转点到世界坐标系
 void PointMapping::PointAssociateToMap(const PointT &pi, PointT &po, const Transform &transform_tobe_mapped) {
   po.x = pi.x;
   po.y = pi.y;
@@ -493,11 +493,9 @@ void PointMapping::OptimizeTransformTobeMapped() {
           float squared_side1 = CalcSquaredDiff(transform_pos, point_sel);
           float squared_side2 = CalcSquaredDiff(point_on_z_axis_, point_sel);
 
-          float check1 = 100.0f + squared_side1 - squared_side2
-              - 10.0f * sqrt(3.0f) * sqrt(squared_side1);
+          float check1 = 100.0f + squared_side1 - squared_side2 - 10.0f * sqrt(3.0f) * sqrt(squared_side1);
 
-          float check2 = 100.0f + squared_side1 - squared_side2
-              + 10.0f * sqrt(3.0f) * sqrt(squared_side1);
+          float check2 = 100.0f + squared_side1 - squared_side2 + 10.0f * sqrt(3.0f) * sqrt(squared_side1);
 
           if (check1 < 0 && check2 > 0) { /// within +-60 degree
             is_in_laser_fov = true;
@@ -585,11 +583,9 @@ void PointMapping::OptimizeTransformTobeMapped() {
           float squared_side1 = CalcSquaredDiff(transform_pos, point_sel);
           float squared_side2 = CalcSquaredDiff(point_on_z_axis_, point_sel);
 
-          float check1 = 100.0f + squared_side1 - squared_side2
-              - 10.0f * sqrt(3.0f) * sqrt(squared_side1);
+          float check1 = 100.0f + squared_side1 - squared_side2 - 10.0f * sqrt(3.0f) * sqrt(squared_side1);
 
-          float check2 = 100.0f + squared_side1 - squared_side2
-              + 10.0f * sqrt(3.0f) * sqrt(squared_side1);
+          float check2 = 100.0f + squared_side1 - squared_side2 + 10.0f * sqrt(3.0f) * sqrt(squared_side1);
 
           if (check1 < 0 && check2 > 0) { /// within +-60 degree
             is_in_laser_fov = true;
@@ -770,7 +766,7 @@ void PointMapping::Process() {
     return;
   }
 
-  Reset();
+  Reset();  // 标志位清除
 
   ++frame_count_;
   if (frame_count_ < num_stack_frames_) {  // 时间降采样？
@@ -782,7 +778,7 @@ void PointMapping::Process() {
 
   // relate incoming data to map
   // WARNING
-  if (!imu_inited_) {  // imu 初始化之后
+  if (!imu_inited_) {  // 如果imu 没有初始化
     TransformAssociateToMap(); // 更新 transform_tobe_mapped_ 变量
   }
 
@@ -804,7 +800,7 @@ void PointMapping::Process() {
   point_on_z_axis_.x = 0.0;
   point_on_z_axis_.y = 0.0;
   point_on_z_axis_.z = 10.0;
-  PointAssociateToMap(point_on_z_axis_, point_on_z_axis_, transform_tobe_mapped_);    // 原点转换到 local map 坐标系下？
+  PointAssociateToMap(point_on_z_axis_, point_on_z_axis_, transform_tobe_mapped_); // 更新自车坐标系到世界坐标系 point_on_z_axis_
 
   // NOTE: in which cube
   int center_cube_i = int((transform_tobe_mapped_.pos.x() + 25.0) / 50.0) + laser_cloud_cen_length_;
@@ -1033,6 +1029,7 @@ void PointMapping::Process() {
   OptimizeTransformTobeMapped();
 
   if (!imu_inited_) {
+    // 如果imu 没有被初始化
     // store down sized corner stack points in corresponding cube clouds
 
     CubeCenter cube_center;
@@ -1103,7 +1100,7 @@ void PointMapping::Process() {
     }
 #endif
 
-    // publish result
+    // publish result  发布结果
     PublishResults();
   }
 

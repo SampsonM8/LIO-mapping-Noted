@@ -303,11 +303,12 @@ void MapBuilder::ProcessMap() {
   point_on_z_axis_.z = 10.0;
   PointAssociateToMap(point_on_z_axis_, point_on_z_axis_, transform_tobe_mapped_);
 
-  // NOTE: in which cube
+  // NOTE: in which cube  还不了解 为什么要偏移一个单位
   int center_cube_i = int((transform_tobe_mapped_.pos.x() + 25.0) / 50.0) + laser_cloud_cen_length_;
   int center_cube_j = int((transform_tobe_mapped_.pos.y() + 25.0) / 50.0) + laser_cloud_cen_width_;
   int center_cube_k = int((transform_tobe_mapped_.pos.z() + 25.0) / 50.0) + laser_cloud_cen_height_;
 
+  // int 取整在负数的时候会+1， 所以要减去一
   // NOTE: negative index
   if (transform_tobe_mapped_.pos.x() + 25.0 < 0) --center_cube_i;
   if (transform_tobe_mapped_.pos.y() + 25.0 < 0) --center_cube_j;
