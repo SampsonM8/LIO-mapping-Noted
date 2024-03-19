@@ -213,7 +213,7 @@ void PointOdometry::ImuTransHandler(const sensor_msgs::PointCloud2ConstPtr &imu_
 
   new_imu_trans_ = true;
 }
-
+// 状态位清除
 void PointOdometry::Reset() {
   new_corner_points_sharp_ = false;
   new_corner_points_less_sharp_ = false;
@@ -224,14 +224,14 @@ void PointOdometry::Reset() {
   // No imu first
   new_imu_trans_ = true;
 }
-
+// 需要同时满足这些条件
 bool PointOdometry::HasNewData() {
   return new_corner_points_sharp_ && new_corner_points_less_sharp_ && new_surf_points_flat_ &&
-      new_surf_points_less_flat_ && new_full_cloud_ &&
-      fabs((time_corner_points_less_sharp_ - time_corner_points_sharp_).toSec()) < 0.005 &&
-      fabs((time_surf_points_flat_ - time_corner_points_sharp_).toSec()) < 0.005 &&
-      fabs((time_surf_points_less_flat_ - time_corner_points_sharp_).toSec()) < 0.005 &&
-      fabs((time_full_cloud_ - time_corner_points_sharp_).toSec()) < 0.005;
+         new_surf_points_less_flat_ && new_full_cloud_ &&
+         fabs((time_corner_points_less_sharp_ - time_corner_points_sharp_).toSec()) < 0.005 &&
+         fabs((time_surf_points_flat_ - time_corner_points_sharp_).toSec()) < 0.005 &&
+         fabs((time_surf_points_less_flat_ - time_corner_points_sharp_).toSec()) < 0.005 &&
+         fabs((time_full_cloud_ - time_corner_points_sharp_).toSec()) < 0.005;
 }
 
 void PointOdometry::TransformToStart(const PointT &pi, PointT &po) {
@@ -290,7 +290,7 @@ size_t PointOdometry::TransformToEnd(PointCloudPtr &cloud) {
 
   return cloud_size;
 }
-
+// lidar only的里程计
 void PointOdometry::Process() {
   if (!HasNewData()) {
     // DLOG(INFO) << "no data received or dropped";
@@ -298,7 +298,7 @@ void PointOdometry::Process() {
   }
 
   Reset();
-
+  // 系统没有初始化成功
   if (!system_inited_) {
     corner_points_less_sharp_.swap(last_corner_cloud_);
     surf_points_less_flat_.swap(last_surf_cloud_);
@@ -318,7 +318,7 @@ void PointOdometry::Process() {
   size_t last_surf_size = last_surf_cloud_->points.size();
 
   tic_toc_.Tic();
-
+  // rosservice 调用是否enable odom
   if (enable_odom_) {
     // NOTE: fixed number here
     if (last_corner_size > 10 && last_surf_size > 100) {
@@ -336,35 +336,35 @@ void PointOdometry::Process() {
 
       for (size_t iter_count = 0; iter_count < num_max_iterations_; ++iter_count) {
         PointT point_sel, tripod1, tripod2, tripod3;
-        laser_cloud_ori_->clear();
+        laser_cloud_ori_->clear(); // 原始点云清空
         coeff_sel_->clear();
-
+        // 遍历sharp 点云
         for (int i = 0; i < num_curr_corner_points_sharp; ++i) {
-          TransformToStart(corner_points_sharp_->points[i], point_sel);
-          if (iter_count % 5 == 0) {
-            kdtree_corner_last_->nearestKSearch(point_sel, 1, point_search_idx, point_search_sq_dis);
+          TransformToStart(corner_points_sharp_->points[i], point_sel);  // 转换到点云帧始
+          if (iter_count % 5 == 0) {  // 5 次一计
+            kdtree_corner_last_->nearestKSearch(point_sel, 1, point_search_idx, point_search_sq_dis); // kdtree 最近临搜索
 
             int closest_point_idx = -1, second_closet_point_idx = -1; /// the second one is in another ring
-            if (point_search_sq_dis[0] < 25) {
-              closest_point_idx = point_search_idx[0];
-              int closest_point_scan = int(last_corner_cloud_->points[closest_point_idx].intensity);
+            if (point_search_sq_dis[0] < 25) { // 找到符合要求的点
+              closest_point_idx = point_search_idx[0];  // 距离最近的点
+              int closest_point_scan = int(last_corner_cloud_->points[closest_point_idx].intensity);  // ring ? 
 
               float point_sq_dis, second_point_sq_dis = 25;
-              for (int j = closest_point_idx + 1; j < last_corner_size; j++) { // NOTE: find points in upper rings
-                if (int(last_corner_cloud_->points[j].intensity) > closest_point_scan + 2.5) {
+              for (int j = closest_point_idx + 1; j < last_corner_size; j++) { // NOTE: find points in upper rings // 默认点云排序了 (排在后面的是ring大的)
+                if (int(last_corner_cloud_->points[j].intensity) > closest_point_scan + 2.5) { // 减少算力消耗，大于2.5 的直接退出遍历
                   break;
                 }
 
-                point_sq_dis = CalcSquaredDiff(last_corner_cloud_->points[j], point_sel);
+                point_sq_dis = CalcSquaredDiff(last_corner_cloud_->points[j], point_sel); // 计算距离
 
-                if (int(last_corner_cloud_->points[j].intensity) > closest_point_scan) {
+                if (int(last_corner_cloud_->points[j].intensity) > closest_point_scan) { // 找到了 ring 更大的，就判断距离
                   if (point_sq_dis < second_point_sq_dis) {
                     second_point_sq_dis = point_sq_dis;
                     second_closet_point_idx = j;
                   }
                 }
               }
-              for (int j = closest_point_idx - 1; j >= 0; j--) { // NOTE: find points in lower rings
+              for (int j = closest_point_idx - 1; j >= 0; j--) { // NOTE: find points in lower rings （排在前面的是ring小的）
                 if (int(last_corner_cloud_->points[j].intensity) < closest_point_scan - 2.5) {
                   break;
                 }
@@ -380,13 +380,13 @@ void PointOdometry::Process() {
               }
             }
 
-            idx_corner1_[i] = closest_point_idx;
-            idx_corner2_[i] = second_closet_point_idx;
+            idx_corner1_[i] = closest_point_idx;  // 最近点的index
+            idx_corner2_[i] = second_closet_point_idx;  // 隔壁ring 的最近点的index
           } // NOTE: two points for closest points in a line, update points
 
-          if (idx_corner2_[i] >= 0) {
-            tripod1 = last_corner_cloud_->points[idx_corner1_[i]];
-            tripod2 = last_corner_cloud_->points[idx_corner2_[i]];
+          if (idx_corner2_[i] >= 0) { // 找到点了， 但是这个容器没有初始化？
+            tripod1 = last_corner_cloud_->points[idx_corner1_[i]];  // 最近点
+            tripod2 = last_corner_cloud_->points[idx_corner2_[i]];  // 隔壁ring的最近点
 
             float x0 = point_sel.x;
             float y0 = point_sel.y;
@@ -397,27 +397,27 @@ void PointOdometry::Process() {
             float x2 = tripod2.x;
             float y2 = tripod2.y;
             float z2 = tripod2.z;
-
+            // 三角形的面经
             float a012 = sqrt(((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-                                  * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-                                  + ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-                                      * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-                                  + ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))
-                                      * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)));
-
+                            * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
+                            + ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
+                            * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
+                            + ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))
+                            * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)));
+            // 三角形的底
             float l12 = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + (z1 - z2) * (z1 - z2));
             // NOTE: l-abc is the distance direction from the line to the point
             float la = ((y1 - y2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-                + (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))) / a012 / l12;
+                      + (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))) / a012 / l12;
 
             float lb = -((x1 - x2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1))
-                - (z1 - z2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) / a012 / l12;
+                       - (z1 - z2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) / a012 / l12;
 
             float lc = -((x1 - x2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
-                + (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) / a012 / l12;
+                       + (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) / a012 / l12;
 
             float ld2 = a012 / l12;
-
+            // 超过5次迭代后，开始引入权重系数，距离越大，权重越小
             float s = 1;
             if (iter_count >= 5) {
               s = 1 - 1.8f * fabs(ld2);
@@ -436,9 +436,9 @@ void PointOdometry::Process() {
           }
 
         } // NOTE: for corner points
-
+        // 遍历surf 点云 和上面过程类似，这里要找三个点，三点成面。
         for (int i = 0; i < num_curr_surf_points_flat; ++i) {
-          TransformToStart(surf_points_flat_->points[i], point_sel);
+          TransformToStart(surf_points_flat_->points[i], point_sel); // 转换到帧始
 
           if (iter_count % 5 == 0) {
             kdtree_surf_last_->nearestKSearch(point_sel, 1, point_search_idx, point_search_sq_dis);
@@ -487,7 +487,7 @@ void PointOdometry::Process() {
                 }
               }
             }
-
+            // 最近点，次近点，第三近点
             idx_surf1_[i] = closest_point_idx;
             idx_surf2_[i] = second_closet_point_idx;
             idx_surf3_[i] = third_clost_point_idx;
@@ -497,15 +497,15 @@ void PointOdometry::Process() {
             tripod1 = last_surf_cloud_->points[idx_surf1_[i]];
             tripod2 = last_surf_cloud_->points[idx_surf2_[i]];
             tripod3 = last_surf_cloud_->points[idx_surf3_[i]];
-
+            // 底面平行四边形 差乘
             float pa = (tripod2.y - tripod1.y) * (tripod3.z - tripod1.z)
-                - (tripod3.y - tripod1.y) * (tripod2.z - tripod1.z);
+                     - (tripod3.y - tripod1.y) * (tripod2.z - tripod1.z);
             float pb = (tripod2.z - tripod1.z) * (tripod3.x - tripod1.x)
-                - (tripod3.z - tripod1.z) * (tripod2.x - tripod1.x);
+                     - (tripod3.z - tripod1.z) * (tripod2.x - tripod1.x);
             float pc = (tripod2.x - tripod1.x) * (tripod3.y - tripod1.y)
-                - (tripod3.x - tripod1.x) * (tripod2.y - tripod1.y);
+                     - (tripod3.x - tripod1.x) * (tripod2.y - tripod1.y);
             float pd = -(pa * tripod1.x + pb * tripod1.y + pc * tripod1.z);
-
+            // 归一化
             float ps = sqrt(pa * pa + pb * pb + pc * pc);
             pa /= ps;
             pb /= ps;
