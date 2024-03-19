@@ -291,12 +291,12 @@ void PointMapping::Reset() {
 
 bool PointMapping::HasNewData() {
   return new_laser_cloud_corner_last_ && new_laser_cloud_surf_last_ &&
-      new_laser_full_cloud_ && new_laser_odometry_ &&
-      fabs((time_laser_cloud_corner_last_ - time_laser_odometry_).toSec()) < 0.005 &&
-      fabs((time_laser_cloud_surf_last_ - time_laser_odometry_).toSec()) < 0.005 &&
-      fabs((time_laser_full_cloud_ - time_laser_odometry_).toSec()) < 0.005;
+         new_laser_full_cloud_ && new_laser_odometry_ &&
+         fabs((time_laser_cloud_corner_last_ - time_laser_odometry_).toSec()) < 0.005 &&
+         fabs((time_laser_cloud_surf_last_ - time_laser_odometry_).toSec()) < 0.005 &&
+         fabs((time_laser_full_cloud_ - time_laser_odometry_).toSec()) < 0.005;
 }
-
+// 对外暴露的接口，看来是外界估计来确认imu是否初始化了
 void PointMapping::SetInitFlag(bool set_init) {
   imu_inited_ = set_init;
 }
@@ -325,7 +325,8 @@ void PointMapping::PointAssociateTobeMapped(const PointT &pi, PointT &po, const 
 // 优化姿态
 void PointMapping::OptimizeTransformTobeMapped() {
   // corner 和 surf 点数判断
-  if (laser_cloud_corner_from_map_->points.size() <= 10 || laser_cloud_surf_from_map_->points.size() <= 100) {
+  if (laser_cloud_corner_from_map_->points.size() <= 10
+   || laser_cloud_surf_from_map_->points.size() <= 100) {
     return;
   }
 
@@ -389,7 +390,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
         Eigen::Vector3f vc(0, 0, 0);
 
         for (int j = 0; j < 5; j++) {
-//          vc += Vector3Intl(laser_cloud_corner_from_map_->points[point_search_idx[j]]);
+//        vc += Vector3Intl(laser_cloud_corner_from_map_->points[point_search_idx[j]]);
           const PointT &point_sel_tmp = laser_cloud_corner_from_map_->points[point_search_idx[j]];
           vc.x() += point_sel_tmp.x;
           vc.y() += point_sel_tmp.y;
@@ -401,7 +402,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
         mat_a.setZero();
 
         for (int j = 0; j < 5; j++) {
-//          Vector3Intl a = Vector3Intl(laser_cloud_corner_from_map_->points[point_search_idx[j]]) - vc;
+//        Vector3Intl a = Vector3Intl(laser_cloud_corner_from_map_->points[point_search_idx[j]]) - vc;
           const PointT &point_sel_tmp = laser_cloud_corner_from_map_->points[point_search_idx[j]];
           Eigen::Vector3f a;
           a.x() = point_sel_tmp.x - vc.x();
@@ -458,7 +459,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
 //
 //          float lc = -((x1 - x2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))
 //              + (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) / a012 / l12;
-
+          // 点线特征匹配
           Eigen::Vector3f a012_vec = (X0 - X1).cross(X0 - X2);
 
           Eigen::Vector3f normal_to_point = ((X1 - X2).cross(a012_vec)).normalized();
@@ -536,13 +537,13 @@ void PointMapping::OptimizeTransformTobeMapped() {
         pc /= ps;
         pd /= ps;
 
-        // NOTE: plane as (x y z)*w+1 = 0
+        // NOTE: plane as (x y z) * w + 1 = 0
 
         bool planeValid = true;
         for (int j = 0; j < num_neighbors; j++) {
           if (fabs(pa * laser_cloud_surf_from_map_->points[point_search_idx[j]].x +
-              pb * laser_cloud_surf_from_map_->points[point_search_idx[j]].y +
-              pc * laser_cloud_surf_from_map_->points[point_search_idx[j]].z + pd) > min_plane_dis_) {
+                   pb * laser_cloud_surf_from_map_->points[point_search_idx[j]].y +
+                   pc * laser_cloud_surf_from_map_->points[point_search_idx[j]].z + pd) > min_plane_dis_) {
             planeValid = false;
             break;
           }
@@ -552,7 +553,7 @@ void PointMapping::OptimizeTransformTobeMapped() {
           float pd2 = pa * point_sel.x + pb * point_sel.y + pc * point_sel.z + pd;
 
           float s = 1 - 0.9f * fabs(pd2) / sqrt(CalcPointDistance(point_sel));
-
+          // 根据d的负号来判断法向量的方法向
           if (pd2 > 0) {
             coeff.x = s * pa;
             coeff.y = s * pb;
@@ -702,8 +703,8 @@ void PointMapping::OptimizeTransformTobeMapped() {
 
     float delta_r = RadToDeg(R_SO3.unit_quaternion().angularDistance(transform_tobe_mapped_.rot));
     float delta_t = sqrt(pow(mat_X(3, 0) * 100, 2) +
-        pow(mat_X(4, 0) * 100, 2) +
-        pow(mat_X(5, 0) * 100, 2));
+                         pow(mat_X(4, 0) * 100, 2) +
+                         pow(mat_X(5, 0) * 100, 2));
 
     if (delta_r < delta_r_abort_ && delta_t < delta_t_abort_) {
       DLOG(INFO) << "iter_count: " << iter_count;
@@ -808,12 +809,20 @@ void PointMapping::Process() {
   int center_cube_k = int((transform_tobe_mapped_.pos.z() + 25.0) / 50.0) + laser_cloud_cen_height_;
 
   // NOTE: negative index  // 在局部地图将3D空间划分成网格
+  // int 向0 取整, 所以负号需要减去一个
   if (transform_tobe_mapped_.pos.x() + 25.0 < 0) --center_cube_i;
   if (transform_tobe_mapped_.pos.y() + 25.0 < 0) --center_cube_j;
   if (transform_tobe_mapped_.pos.z() + 25.0 < 0) --center_cube_k;
 
-//  DLOG(INFO) << "center_before: " << center_cube_i << " " << center_cube_j << " " << center_cube_k;
+  //  DLOG(INFO) << "center_before: " << center_cube_i << " " << center_cube_j << " " << center_cube_k;
+  std::cout << "center before : " << center_cube_i  << " " << center_cube_j << " " << center_cube_k << std::endl;
   // 2024-3-14 不明白下面这些点操作的含义
+  // 2024-3-18 下面这些操作是为了使得center + panding 能一直保持 在 21 * 21 * 11 个格子组成的坐标系内
+  //           这样才能使得i，j，k这三个索引转换为 一维 的索引的时候，索引是合法的
+  // std::cout << "laser cloud cen length : " << laser_cloud_cen_length_ << std::endl;
+  // std::cout << "laser cloud width : " << laser_cloud_width_ << std::endl;
+  // std::cout << "laser cloud height : " << laser_cloud_height_ << std::endl;
+  // std::cout << "laser cloud length : " << laser_cloud_length_ << std::endl;
   {
     while (center_cube_i < 3) {
       for (int j = 0; j < laser_cloud_width_; ++j) {
@@ -918,23 +927,27 @@ void PointMapping::Process() {
     }
   }
 
+  // std::cout << "center after : " << center_cube_i  << " " << center_cube_j << " " << center_cube_k << std::endl;
+
   // NOTE: above slide cubes
 
   // 清除这些容器
   laser_cloud_valid_idx_.clear();
   laser_cloud_surround_idx_.clear();
 
-//  DLOG(INFO) << "center_after: " << center_cube_i << " " << center_cube_j << " " << center_cube_k;
-//  DLOG(INFO) << "laser_cloud_cen: " << laser_cloud_cen_length_ << " " << laser_cloud_cen_width_ << " "
-//            << laser_cloud_cen_height_;
-  // 3层循环遍历 网格内的点
+  // DLOG(INFO) << "center_after: " << center_cube_i << " " << center_cube_j << " " << center_cube_k;
+  // DLOG(INFO) << "laser_cloud_cen: " << laser_cloud_cen_length_ << " " << laser_cloud_cen_width_ << " "
+  //            << laser_cloud_cen_height_;
+  // 3层循环遍历 网格内的点 大小是5 * 5 * 5 
   for (int i = center_cube_i - 2; i <= center_cube_i + 2; ++i) {
     for (int j = center_cube_j - 2; j <= center_cube_j + 2; ++j) {
       for (int k = center_cube_k - 2; k <= center_cube_k + 2; ++k) {
         if (i >= 0 && i < laser_cloud_length_ &&
             j >= 0 && j < laser_cloud_width_ &&
             k >= 0 && k < laser_cloud_height_) { /// Should always in this condition
+          // 索引必须是合法的
           // 相对于网格中心的偏移 offset
+          // 这里减去相对应的偏移，还是没看懂
           float center_x = 50.0f * (i - laser_cloud_cen_length_);
           float center_y = 50.0f * (j - laser_cloud_cen_width_);
           float center_z = 50.0f * (k - laser_cloud_cen_height_); // NOTE: center of the cube
@@ -956,11 +969,9 @@ void PointMapping::Process() {
                 float squared_side1 = CalcSquaredDiff(transform_pos, corner);
                 float squared_side2 = CalcSquaredDiff(point_on_z_axis_, corner);
 
-                float check1 = 100.0f + squared_side1 - squared_side2
-                    - 10.0f * sqrt(3.0f) * sqrt(squared_side1);
+                float check1 = 100.0f + squared_side1 - squared_side2 - 10.0f * sqrt(3.0f) * sqrt(squared_side1);
 
-                float check2 = 100.0f + squared_side1 - squared_side2
-                    + 10.0f * sqrt(3.0f) * sqrt(squared_side1);
+                float check2 = 100.0f + squared_side1 - squared_side2 + 10.0f * sqrt(3.0f) * sqrt(squared_side1);
 
                 if (check1 < 0 && check2 > 0) { /// within +-60 degree
                   is_in_laser_fov = true;
