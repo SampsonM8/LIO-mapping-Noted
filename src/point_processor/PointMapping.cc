@@ -102,7 +102,7 @@ PointMapping::PointMapping(float scan_period,
   // initialize frame counter
   frame_count_ = num_stack_frames_ - 1;
   map_frame_count_ = num_map_frames_ - 1;
-
+  std::cout << "laser cloud num : " << laser_cloud_num_ << std::endl;
   // setup cloud vectors
   laser_cloud_corner_array_.resize(laser_cloud_num_);
   laser_cloud_surf_array_.resize(laser_cloud_num_);

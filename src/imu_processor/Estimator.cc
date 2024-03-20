@@ -231,8 +231,7 @@ void Estimator::SetupAllEstimatorConfig(const EstimatorConfig &config, const Mea
 void Estimator::ClearState() {
   // TODO: CirclarBuffer should have clear method
 
-  for (size_t i = 0; i < estimator_config_.window_size + 1;
-       ++i) {
+  for (size_t i = 0; i < estimator_config_.window_size + 1; ++i) {
     Rs_[i].setIdentity();
     Ps_[i].setZero();
     Vs_[i].setZero();
@@ -254,8 +253,7 @@ void Estimator::ClearState() {
     }
   }
 
-  for (size_t i = 0; i < estimator_config_.opt_window_size + 1;
-       ++i) {
+  for (size_t i = 0; i < estimator_config_.opt_window_size + 1; ++i) {
 //    opt_point_coeff_mask_[i] = false;
 //    opt_cube_centers_[i];
 //    opt_valid_idx_[i];
@@ -377,7 +375,7 @@ void Estimator::ProcessImu(double dt,
 
   // NOTE: Do not update tmp_pre_integration_ until first laser comes // 函数用了大量的类内全局变量，写的很不好
   // 初始化的时候 cur_buff_count  = 0, 所以不会进这个循环
-  if (cir_buf_count_ != 0) { // 根据变量名字也不知道是哪个buffer
+  if (cir_buf_count_ != 0) { // 根据变量名字也不知道是哪个buffer 循环buffer计数
 
     tmp_pre_integration_->push_back(dt, linear_acceleration, angular_velocity); // 这个对象就是负责预积分的 （里面的代码用的就是中值积分）这个就是论文框图里的Pre-integration
     // https://zhuanlan.zhihu.com/p/473227932 预积分的博客
@@ -390,7 +388,7 @@ void Estimator::ProcessImu(double dt,
     Vector3d un_acc_0 = Rs_[j] * (acc_last_ - Bas_[j]) + g_vec_;  // g_vec_ 在哪里初始化的？
     Vector3d un_gyr = 0.5 * (gyr_last_ + angular_velocity) - Bgs_[j]; // 平均两帧角速度
     Rs_[j] *= DeltaQ(un_gyr * dt).toRotationMatrix(); // 更新姿态 q
-    Vector3d un_acc_1 = Rs_[j] * (linear_acceleration - Bas_[j]) + g_vec_;
+    Vector3d un_acc_1 = Rs_[j] * (linear_acceleration - Bas_[j]) + g_vec_; // 此帧加速度
     Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);   // 平均两帧的加速度 
     Ps_[j] += dt * Vs_[j] + 0.5 * dt * dt * un_acc;  // 更新位置 基本高中物理知识 p
     Vs_[j] += dt * un_acc;   // 更新最后一帧的速度 v
@@ -430,13 +428,12 @@ void Estimator::ProcessImu(double dt,
 
 // TODO: this function can be simplified
 void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::Header &header) {
-
+  LOG(INFO) << "----------------ProcessLaserOdom" << std::endl;
   ROS_DEBUG(">>>>>>> new laser odom coming <<<<<<<");
-
+  LOG(INFO) << "laser odom receive count : " << laser_odom_recv_count_ << std::endl;
   ++laser_odom_recv_count_;
-
-  if (stage_flag_ != INITED
-      && laser_odom_recv_count_ % estimator_config_.init_window_factor != 0) { /// better for initialization
+  LOG(INFO) << "stage flag : " << stage_flag_ << std::endl;
+  if (stage_flag_ != INITED && laser_odom_recv_count_ % estimator_config_.init_window_factor != 0) { /// better for initialization
     return;
   }
 
@@ -444,7 +441,7 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
 
   // TODO: LaserFrame Object
   // LaserFrame laser_frame(laser, header.stamp.toSec());
-
+  // 构造laser_transform
   LaserTransform laser_transform(header.stamp.toSec(), transform_in);
 
   laser_transform.pre_integration = tmp_pre_integration_;
@@ -777,14 +774,15 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
 
 void Estimator::ProcessCompactData(const sensor_msgs::PointCloud2ConstPtr &compact_data,
                                    const std_msgs::Header &header) {
-  /// 1. process compact data // 调用pointmapping 类里面的方法， 看完只是存取点云数据（提取过feature 的点云）
+  /// 1. process compact data
+  // 调用pointmapping 类里面的方法， 看完只是存取点云数据（提取过feature 的点云）
   PointMapping::CompactDataHandler(compact_data);
 
   if (stage_flag_ == INITED) { // 初始化完成之后
     Transform trans_prev(Eigen::Quaterniond(Rs_[estimator_config_.window_size - 1]).cast<float>(),
-                         Ps_[estimator_config_.window_size - 1].cast<float>());
+                                            Ps_[estimator_config_.window_size - 1].cast<float>());
     Transform trans_curr(Eigen::Quaterniond(Rs_.last()).cast<float>(),
-                         Ps_.last().cast<float>());
+                                            Ps_.last().cast<float>());
 
     Transform d_trans = trans_prev.inverse() * trans_curr;  // 最后两帧之间的translation
 
