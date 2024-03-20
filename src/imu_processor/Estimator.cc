@@ -427,6 +427,7 @@ void Estimator::ProcessImu(double dt,
 }
 
 // TODO: this function can be simplified
+// 这个方法很重要，几乎是lio-mapping的核心了
 void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::Header &header) {
   LOG(INFO) << "----------------ProcessLaserOdom" << std::endl;
   ROS_DEBUG(">>>>>>> new laser odom coming <<<<<<<");
@@ -434,6 +435,7 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
   ++laser_odom_recv_count_;
   LOG(INFO) << "stage flag : " << stage_flag_ << std::endl;
   if (stage_flag_ != INITED && laser_odom_recv_count_ % estimator_config_.init_window_factor != 0) { /// better for initialization
+    LOG(INFO) << "Not INITED, and interval frames" << std::endl;
     return;
   }
 
@@ -443,10 +445,10 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
   // LaserFrame laser_frame(laser, header.stamp.toSec());
   // 构造laser_transform
   LaserTransform laser_transform(header.stamp.toSec(), transform_in);
-
+  // 更新laser_transform 的pre_integration
   laser_transform.pre_integration = tmp_pre_integration_;
   pre_integrations_.push(tmp_pre_integration_);
-
+  LOG(INFO) << "cir buf count : " << cir_buf_count_ << std::endl;
   // reset tmp_pre_integration_
   tmp_pre_integration_.reset();
   tmp_pre_integration_ = std::make_shared<IntegrationBase>(IntegrationBase(acc_last_,
@@ -454,10 +456,8 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
                                                                            Bas_[cir_buf_count_],
                                                                            Bgs_[cir_buf_count_],
                                                                            estimator_config_.pim_config));
-
+  // 所有的transform 放到容器里
   all_laser_transforms_.push(make_pair(header.stamp.toSec(), laser_transform));
-
-
 
   // TODO: check extrinsic parameter estimation
 
@@ -470,6 +470,7 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
   opt_valid_idx_.push(laser_cloud_valid_idx_);
 
   // TODO: avoid memory allocation?
+  // 如果没有初始化，就把点云放到stack里
   if (stage_flag_ != INITED || (!estimator_config_.enable_deskew && !estimator_config_.cutoff_deskew)) {
     surf_stack_.push(boost::make_shared<PointCloud>(*laser_cloud_surf_stack_downsampled_));
     size_surf_stack_.push(laser_cloud_surf_stack_downsampled_->size());
@@ -477,19 +478,18 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
     corner_stack_.push(boost::make_shared<PointCloud>(*laser_cloud_corner_stack_downsampled_));
     size_corner_stack_.push(laser_cloud_corner_stack_downsampled_->size());
   }
-
+  // 全部点云的stack 存放full cloud
   full_stack_.push(boost::make_shared<PointCloud>(*full_cloud_));
-
+  // surf stack 和 corner stack 存放最新的一帧数据
   opt_surf_stack_.push(surf_stack_.last());
   opt_corner_stack_.push(corner_stack_.last());
 
   opt_matP_.push(matP_.cast<double>());
   ///< optimization buffers
-
+  // 启用优化
   if (estimator_config_.run_optimization) {
-    switch (stage_flag_) {
-      case NOT_INITED: {
-
+    switch (stage_flag_) { // 根据当前状态判断
+      case NOT_INITED: { // 如果没有初始化
         {
           DLOG(INFO) << "surf_stack_: " << surf_stack_.size();
           DLOG(INFO) << "corner_stack_: " << corner_stack_.size();
@@ -501,34 +501,30 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
         }
 
         bool init_result = false;
-        if (cir_buf_count_ == estimator_config_.window_size) {
+        if (cir_buf_count_ == estimator_config_.window_size) { // 如果buf的数量等于 window的窗口
           tic_toc_.Tic();
-
+          // 如果没有使用imu
           if (!estimator_config_.imu_factor) {
             init_result = true;
             // TODO: update states Ps_
-            for (size_t i = 0; i < estimator_config_.window_size + 1;
-                 ++i) {
+            for (size_t i = 0; i < estimator_config_.window_size + 1; ++i) {
               const Transform &trans_li = all_laser_transforms_[i].second.transform;
               Transform trans_bi = trans_li * transform_lb_;
               Ps_[i] = trans_bi.pos.template cast<double>();
               Rs_[i] = trans_bi.rot.normalized().toRotationMatrix().template cast<double>();
             }
-          } else {
-
-            if (extrinsic_stage_ == 2) {
+          } else { // 使用imu
+            if (extrinsic_stage_ == 2) { // 如果外参标定的阶段到了 2（ 初始化的阶段就是2）
               // TODO: move before initialization
+              // 开始计算外参
               bool extrinsic_result = ImuInitializer::EstimateExtrinsicRotation(all_laser_transforms_, transform_lb_);
-              LOG(INFO) << ">>>>>>> extrinsic calibration"
-                        << (extrinsic_result ? " successful"
-                                             : " failed")
-                        << " <<<<<<<";
+              LOG(INFO) << ">>>>>>> extrinsic calibration" << (extrinsic_result ? " successful" : " failed") << " <<<<<<<";
               if (extrinsic_result) {
-                extrinsic_stage_ = 1;
+                extrinsic_stage_ = 1; // 外参标定成功
                 DLOG(INFO) << "change extrinsic stage to 1";
               }
             }
-
+            // 外参标定阶段 跳过了2， 
             if (extrinsic_stage_ != 2 && (header.stamp.toSec() - initial_time_) > 0.1) {
               DLOG(INFO) << "EXTRINSIC STAGE: " << extrinsic_stage_;
               init_result = RunInitialization();
@@ -543,7 +539,7 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
             SetInitFlag(true);
 
             Q_WI_ = R_WI_;
-//            wi_trans_.setRotation(tf::Quaternion{Q_WI_.x(), Q_WI_.y(), Q_WI_.z(), Q_WI_.w()});
+            // wi_trans_.setRotation(tf::Quaternion{Q_WI_.x(), Q_WI_.y(), Q_WI_.z(), Q_WI_.w()});
 
             ROS_WARN_STREAM(">>>>>>> IMU initialized <<<<<<<");
 
@@ -641,13 +637,13 @@ void Estimator::ProcessLaserOdom(const Transform &transform_in, const std_msgs::
                 break;
               }
             }
-//            Eigen::Vector3d body_velocity, vel1, vel2;
-//            vel1 = Rs_[estimator_config_.window_size - 1].transpose() * Vs_[estimator_config_.window_size - 1];
-//            vel2 = Rs_[estimator_config_.window_size].transpose() * Vs_[estimator_config_.window_size];
-//            body_velocity = (vel1 + vel2) / 2;
+            //            Eigen::Vector3d body_velocity, vel1, vel2;
+            //            vel1 = Rs_[estimator_config_.window_size - 1].transpose() * Vs_[estimator_config_.window_size - 1];
+            //            vel2 = Rs_[estimator_config_.window_size].transpose() * Vs_[estimator_config_.window_size];
+            //            body_velocity = (vel1 + vel2) / 2;
 
             Transform transform_body_es = transform_e.inverse() * transform_s;
-//            transform_body_es.pos = -0.1 * body_velocity.cast<float>();
+            //            transform_body_es.pos = -0.1 * body_velocity.cast<float>();
             {
               float s = 0.1 / (time_e - time_s);
               Eigen::Quaternionf q_id, q_s, q_e, q_half;
@@ -854,7 +850,7 @@ void Estimator::ProcessCompactData(const sensor_msgs::PointCloud2ConstPtr &compa
 //  }
 
 }
-
+// 初始化  这个函数很重要
 bool Estimator::RunInitialization() {
 
   // NOTE: check IMU observibility, adapted from VINS-mono

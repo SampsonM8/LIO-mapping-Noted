@@ -71,7 +71,7 @@ struct LaserTransform {
 };
 
 typedef pair<double, LaserTransform> PairTimeLaserTransform;
-
+// imu 初始化类
 class ImuInitializer {
 
  public:
@@ -92,4 +92,4 @@ class ImuInitializer {
 
 }
 
-#endif //LIO_IMUINITIALIZER_H_
+#endif //LIO_IMUINITIALIZER_H_  

@@ -78,7 +78,7 @@ struct MeasurementManagerConfig {
   double msg_time_delay = 0;
   bool enable_imu = true;
 };
-
+// 数据管理类
 class MeasurementManager {
 
  public:

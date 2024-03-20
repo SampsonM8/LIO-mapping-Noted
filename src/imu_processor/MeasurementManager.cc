@@ -63,15 +63,13 @@ PairMeasurements MeasurementManager::GetMeasurements() {
         return measurements;
       }
 
-      if (imu_buf_.back()->header.stamp.toSec()
-          <= compact_data_buf_.front()->header.stamp.toSec() + mm_config_.msg_time_delay) {
+      if (imu_buf_.back()->header.stamp.toSec() <= compact_data_buf_.front()->header.stamp.toSec() + mm_config_.msg_time_delay) {
         //ROS_DEBUG("wait for imu, only should happen at the beginning");
         // Count for waiting time
         return measurements;
       }
 
-      if (imu_buf_.front()->header.stamp.toSec()
-          >= compact_data_buf_.front()->header.stamp.toSec() + mm_config_.msg_time_delay) {
+      if (imu_buf_.front()->header.stamp.toSec() >= compact_data_buf_.front()->header.stamp.toSec() + mm_config_.msg_time_delay) {
         ROS_DEBUG("throw compact_data, only should happen at the beginning");
         compact_data_buf_.pop();
         continue;
@@ -80,8 +78,7 @@ PairMeasurements MeasurementManager::GetMeasurements() {
       compact_data_buf_.pop();
 
       vector<sensor_msgs::ImuConstPtr> imu_measurements;
-      while (imu_buf_.front()->header.stamp.toSec()
-          < compact_data_msg->header.stamp.toSec() + mm_config_.msg_time_delay) {
+      while (imu_buf_.front()->header.stamp.toSec() < compact_data_msg->header.stamp.toSec() + mm_config_.msg_time_delay) {
         imu_measurements.emplace_back(imu_buf_.front());
         imu_buf_.pop();
       }
@@ -106,7 +103,7 @@ PairMeasurements MeasurementManager::GetMeasurements() {
   }
 
 }
-
+// 处理imu数据
 void MeasurementManager::ImuHandler(const sensor_msgs::ImuConstPtr &raw_imu_msg) {
   if (raw_imu_msg->header.stamp.toSec() <= imu_last_time_) {
     LOG(ERROR) << ("imu message in disorder!");
@@ -139,7 +136,7 @@ void MeasurementManager::LaserOdomHandler(const nav_msgs::OdometryConstPtr &lase
   buf_mutex_.unlock();
   con_.notify_one();
 }
-
+// CompactData
 void MeasurementManager::CompactDataHandler(const sensor_msgs::PointCloud2ConstPtr &compact_data_msg) {
   buf_mutex_.lock();
   compact_data_buf_.push(compact_data_msg);

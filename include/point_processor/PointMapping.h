@@ -246,7 +246,7 @@ class PointMapping {
   float min_plane_dis_ = 0.2;
   PointT point_on_z_axis_;
 
-  Eigen::Matrix<float, 6, 6> matP_;
+  Eigen::Matrix<float, 6, 6> matP_; // 暂时不知道这个P矩阵的含义
 
 };
 

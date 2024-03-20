@@ -34,7 +34,8 @@
 #include <Eigen/Eigen>
 
 #include "utils/math_utils.h"
-
+/// @brief https://blog.csdn.net/weixin_43991178/article/details/100763656#IntegrationBase_322
+/// 阅读此博客
 namespace lio {
 
 using namespace mathutils;
@@ -68,7 +69,7 @@ struct IntegrationBaseConfig {
   double gyr_w = 2.0e-5;
   double g_norm = 9.805;
 };
-
+// 积分类
 class IntegrationBase {
 
  public:
@@ -81,17 +82,17 @@ class IntegrationBase {
         gyr0_{gyr0},
         linearized_acc_{acc0},
         linearized_gyr_{gyr0},
-        linearized_ba_{linearized_ba},
-        linearized_bg_{linearized_bg},
-        jacobian_{Matrix<double, 15, 15>::Identity()},
-        covariance_{Matrix<double, 15, 15>::Zero()},
+        linearized_ba_{linearized_ba}, // bias acc
+        linearized_bg_{linearized_bg}, // bias gyro
+        jacobian_{Matrix<double, 15, 15>::Identity()},  // 雅戈比矩阵
+        covariance_{Matrix<double, 15, 15>::Zero()},  // 协方差矩阵
         sum_dt_{0.0},
         delta_p_{Vector3d::Zero()},
         delta_q_{Quaterniond::Identity()},
         delta_v_{Vector3d::Zero()} {
-    config_ = config;
-    g_vec_ = Vector3d(0, 0, -config_.g_norm);
-    noise_ = Matrix<double, 18, 18>::Zero();
+    config_ = config;  // 配置文件
+    g_vec_ = Vector3d(0, 0, -config_.g_norm); // gvec
+    noise_ = Matrix<double, 18, 18>::Zero();  // 噪声矩阵
     noise_.block<3, 3>(0, 0) = (config_.acc_n * config_.acc_n) * Matrix3d::Identity();
     noise_.block<3, 3>(3, 3) = (config_.gyr_n * config_.gyr_n) * Matrix3d::Identity();
     noise_.block<3, 3>(6, 6) = (config_.acc_n * config_.acc_n) * Matrix3d::Identity();
@@ -99,14 +100,19 @@ class IntegrationBase {
     noise_.block<3, 3>(12, 12) = (config_.acc_w * config_.acc_w) * Matrix3d::Identity();
     noise_.block<3, 3>(15, 15) = (config_.gyr_w * config_.gyr_w) * Matrix3d::Identity();
   }
-
+  /// @brief 存入数据，自动调用积分函数
+  /// @param dt 
+  /// @param acc 
+  /// @param gyr 
   void push_back(double dt, const Vector3d &acc, const Vector3d &gyr) {
     dt_buf_.push_back(dt);
     acc_buf_.push_back(acc);
     gyr_buf_.push_back(gyr);
     Propagate(dt, acc, gyr);
   }
-
+  /// @brief 重积分
+  /// @param linearized_ba 
+  /// @param linearized_bg 
   void Repropagate(const Vector3d &linearized_ba, const Vector3d &linearized_bg) {
     // NOTE: Repropagate with measurements, not efficient
     sum_dt_ = 0.0;
@@ -120,10 +126,27 @@ class IntegrationBase {
     jacobian_.setIdentity();
     covariance_.setZero();
     for (size_t i = 0; i < dt_buf_.size(); ++i) {
+      // 按步积分
       Propagate(dt_buf_[i], acc_buf_[i], gyr_buf_[i]);
     }
   }
-
+  /// @brief 中值积分
+  /// @param dt 
+  /// @param acc0 
+  /// @param gyr0 
+  /// @param acc1 
+  /// @param gyr1 
+  /// @param delta_p 
+  /// @param delta_q 
+  /// @param delta_v 
+  /// @param linearized_ba 
+  /// @param linearized_bg 
+  /// @param result_delta_p 
+  /// @param result_delta_q 
+  /// @param result_delta_v 
+  /// @param result_linearized_ba 
+  /// @param result_linearized_bg 
+  /// @param update_jacobian 
   void MidPointIntegration(double dt,
                            const Vector3d &acc0, const Vector3d &gyr0,
                            const Vector3d &acc1, const Vector3d &gyr1,
@@ -136,37 +159,37 @@ class IntegrationBase {
     //ROS_DEBUG("midpoint integration");
 
     // NOTE: the un_acc here is different from the un_acc in the Estimator
-    Vector3d un_acc_0 = delta_q * (acc0 - linearized_ba);
-    Vector3d un_gyr = 0.5 * (gyr0 + gyr1) - linearized_bg;
-    result_delta_q = delta_q * Quaterniond(1, un_gyr(0) * dt / 2, un_gyr(1) * dt / 2, un_gyr(2) * dt / 2);
-    Vector3d un_acc_1 = result_delta_q * (acc1 - linearized_ba);
-    Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
-    result_delta_p = delta_p + delta_v * dt + 0.5 * un_acc * dt * dt;
-    result_delta_v = delta_v + un_acc * dt;
-    result_linearized_ba = linearized_ba;
-    result_linearized_bg = linearized_bg;
+    Vector3d un_acc_0 = delta_q * (acc0 - linearized_ba);  // 加速度去零偏
+    Vector3d un_gyr = 0.5 * (gyr0 + gyr1) - linearized_bg;  // 陀螺仪数据去零偏
+    result_delta_q = delta_q * Quaterniond(1, un_gyr(0) * dt / 2, un_gyr(1) * dt / 2, un_gyr(2) * dt / 2);  // 角度更新
+    Vector3d un_acc_1 = result_delta_q * (acc1 - linearized_ba);  // 加速度去零偏
+    Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1); // 平均两帧加速度
+    result_delta_p = delta_p + delta_v * dt + 0.5 * un_acc * dt * dt; // 更新位置
+    result_delta_v = delta_v + un_acc * dt; // 更新速度
+    result_linearized_ba = linearized_ba; // 传值进来更新变量
+    result_linearized_bg = linearized_bg; // 传值进来更新变量
 
-    if (update_jacobian) {
-      Vector3d w_x = 0.5 * (gyr0 + gyr1) - linearized_bg;
+    if (update_jacobian) { // 更新雅戈比矩阵
+      Vector3d w_x = 0.5 * (gyr0 + gyr1) - linearized_bg; 
       Vector3d a_0_x = acc0 - linearized_ba;
       Vector3d a_1_x = acc1 - linearized_ba;
       Matrix3d R_w_x, R_a_0_x, R_a_1_x;
 
       R_w_x << 0, -w_x(2), w_x(1),
-          w_x(2), 0, -w_x(0),
-          -w_x(1), w_x(0), 0;
+               w_x(2), 0, -w_x(0),
+              -w_x(1), w_x(0), 0;
       R_a_0_x << 0, -a_0_x(2), a_0_x(1),
-          a_0_x(2), 0, -a_0_x(0),
-          -a_0_x(1), a_0_x(0), 0;
+                 a_0_x(2), 0, -a_0_x(0),
+                -a_0_x(1), a_0_x(0), 0;
       R_a_1_x << 0, -a_1_x(2), a_1_x(1),
-          a_1_x(2), 0, -a_1_x(0),
-          -a_1_x(1), a_1_x(0), 0;
+                 a_1_x(2), 0, -a_1_x(0),
+                -a_1_x(1), a_1_x(0), 0;
 
       // NOTE: F = Fd = \Phi = I + dF*dt
       MatrixXd F = MatrixXd::Zero(15, 15);
       F.block<3, 3>(0, 0) = Matrix3d::Identity();
       F.block<3, 3>(0, 3) = -0.25 * delta_q.toRotationMatrix() * R_a_0_x * dt * dt +
-          -0.25 * result_delta_q.toRotationMatrix() * R_a_1_x * (Matrix3d::Identity() - R_w_x * dt) * dt * dt;
+                            -0.25 * result_delta_q.toRotationMatrix() * R_a_1_x * (Matrix3d::Identity() - R_w_x * dt) * dt * dt;
       F.block<3, 3>(0, 6) = MatrixXd::Identity(3, 3) * dt;
       F.block<3, 3>(0, 9) = -0.25 * (delta_q.toRotationMatrix() + result_delta_q.toRotationMatrix()) * dt * dt;
 //      F.block<3, 3>(0, 12) = -0.25 * result_delta_q.toRotationMatrix() * R_a_1_x * dt * dt * -dt;
@@ -174,7 +197,7 @@ class IntegrationBase {
       F.block<3, 3>(3, 3) = Matrix3d::Identity() - R_w_x * dt;
       F.block<3, 3>(3, 12) = -1.0 * MatrixXd::Identity(3, 3) * dt;
       F.block<3, 3>(6, 3) = -0.5 * delta_q.toRotationMatrix() * R_a_0_x * dt +
-          -0.5 * result_delta_q.toRotationMatrix() * R_a_1_x * (Matrix3d::Identity() - R_w_x * dt) * dt;
+                            -0.5 * result_delta_q.toRotationMatrix() * R_a_1_x * (Matrix3d::Identity() - R_w_x * dt) * dt;
       F.block<3, 3>(6, 6) = Matrix3d::Identity();
       F.block<3, 3>(6, 9) = -0.5 * (delta_q.toRotationMatrix() + result_delta_q.toRotationMatrix()) * dt;
       F.block<3, 3>(6, 12) = -0.5 * result_delta_q.toRotationMatrix() * R_a_1_x * dt * -dt;

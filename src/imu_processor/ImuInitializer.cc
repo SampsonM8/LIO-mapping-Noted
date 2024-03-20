@@ -32,9 +32,15 @@
 
 namespace lio {
 
+// 在数学和计算几何中，切线基（Tangent Basis）通常用于描述曲面或曲线上的切平面和法线方向
+// 在计算机图形学中，切线基是一组基向量，用于描述三维模型表面的局部几何属性，通常用于光照、法线映射等计算中。
+
+// 切线基通常由三个基向量组成：切线 t、副法线（或切线副法线） b 和法线 n。
+// 这三个向量构成了一个正交基，其中切线和副法线位于模型表面的切平面内，而法线垂直于切平面。
+
 MatrixXd TangentBasis(Vector3d &g0) {
   Vector3d b, c;
-  Vector3d a = g0.normalized();
+  Vector3d a = g0.normalized(); // 归一化
   Vector3d tmp(0, 0, 1);
   if (a == tmp)
     tmp << 1, 0, 0;
@@ -45,7 +51,7 @@ MatrixXd TangentBasis(Vector3d &g0) {
   bc.block<3, 1>(0, 1) = c;
   return bc;
 }
-
+// 根据所有变换数据，来估计偏置
 void EstimateGyroBias(CircularBuffer<PairTimeLaserTransform> &all_laser_transforms,
                       CircularBuffer<Vector3d> &Bgs) {
   Matrix3d A;
@@ -54,9 +60,9 @@ void EstimateGyroBias(CircularBuffer<PairTimeLaserTransform> &all_laser_transfor
   A.setZero();
   b.setZero();
 
-//  for (int i = 0; i < pre_integrations.size(); ++i) {
-//    DLOG(INFO) << pre_integrations[i]->acc0_.transpose();
-//  }
+  //  for (int i = 0; i < pre_integrations.size(); ++i) {
+  //    DLOG(INFO) << pre_integrations[i]->acc0_.transpose();
+  //  }
 
   size_t window_size = all_laser_transforms.size() - 1;
 
